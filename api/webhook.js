@@ -1,4 +1,4 @@
-// api/webhook.js — recebe webhook da Hotmart
+// api/webhook.js — Hotmart webhook v2.0.0 (payload real validado)
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
@@ -9,37 +9,42 @@ const supabase = createClient(
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const token = req.headers['x-hotmart-webhook-token'] || req.query.token;
+  // Hotmart envia token na query string
+  const token = req.query.token;
   if (token !== process.env.HOTMART_TOKEN) {
+    console.error('Invalid token:', token);
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
+  // Log completo para debug nos logs do Vercel
+  console.log('HOTMART PAYLOAD:', JSON.stringify(req.body, null, 2));
+
   try {
     const body = req.body;
-    const event  = body?.event || body?.data?.event;
-    const status = body?.data?.purchase?.status || body?.purchase?.status;
 
-    const email =
-      body?.data?.buyer?.email ||
-      body?.buyer?.email ||
-      body?.data?.purchase?.buyer?.email;
+    // Campos reais do payload Hotmart v2.0.0
+    const event  = body?.event;                    // "PURCHASE_APPROVED", "PURCHASE_REFUNDED" etc
+    const status = body?.data?.purchase?.status;   // "APPROVED", "REFUNDED" etc
+    const email  = body?.data?.buyer?.email;       // email do comprador
 
     if (!email) {
-      return res.status(400).json({ error: 'Email not found in payload' });
+      console.error('Email not found. Keys:', Object.keys(body?.data?.buyer || {}));
+      return res.status(400).json({ error: 'Email not found', payload_event: event });
     }
 
     const emailNorm = email.trim().toLowerCase();
 
-    // ── REEMBOLSO → desativa acesso ──────────────────────────────
-    const isRefund =
+    // ── REEMBOLSO / CANCELAMENTO → remove acesso ─────────────────
+    const isRevoke =
       event === 'PURCHASE_REFUNDED'   ||
       event === 'PURCHASE_CANCELLED'  ||
       event === 'PURCHASE_CHARGEBACK' ||
+      event === 'PURCHASE_PROTEST'    ||
       status === 'REFUNDED'           ||
       status === 'CANCELLED'          ||
       status === 'CHARGEBACK';
 
-    if (isRefund) {
+    if (isRevoke) {
       const { error } = await supabase
         .from('members')
         .update({
@@ -50,45 +55,44 @@ export default async function handler(req, res) {
         .eq('email', emailNorm);
 
       if (error) return res.status(500).json({ error: error.message });
-
-      console.log('Access revoked:', emailNorm, event);
+      console.log('Access REVOKED:', emailNorm, '| reason:', event);
       return res.status(200).json({ success: true, action: 'revoked', email: emailNorm });
     }
 
-    // ── COMPRA APROVADA → ativa acesso com expiração 12 meses ────
-    const isApproved =
-      event === 'PURCHASE_COMPLETE'  ||
+    // ── COMPRA APROVADA → libera acesso por 12 meses ─────────────
+    const isApprove =
       event === 'PURCHASE_APPROVED'  ||
-      status === 'COMPLETE'          ||
-      status === 'APPROVED';
+      event === 'PURCHASE_COMPLETE'  ||
+      status === 'APPROVED'          ||
+      status === 'COMPLETE';
 
-    if (isApproved) {
+    if (isApprove) {
       const now       = new Date();
       const expiresAt = new Date(now);
-      expiresAt.setFullYear(expiresAt.getFullYear() + 1); // +12 meses
+      expiresAt.setFullYear(expiresAt.getFullYear() + 1);
 
       const { error } = await supabase
         .from('members')
         .upsert(
           {
-            email:        emailNorm,
-            active:       true,
-            joined_at:    now.toISOString(),
-            expires_at:   expiresAt.toISOString(),
-            source:       'hotmart',
-            raw_event:    JSON.stringify(body).substring(0, 500)
+            email:      emailNorm,
+            active:     true,
+            joined_at:  now.toISOString(),
+            expires_at: expiresAt.toISOString(),
+            source:     'hotmart',
+            raw_event:  JSON.stringify(body).substring(0, 1000)
           },
           { onConflict: 'email' }
         );
 
       if (error) return res.status(500).json({ error: error.message });
-
-      console.log('Member registered:', emailNorm, '| expires:', expiresAt.toISOString());
+      console.log('Access GRANTED:', emailNorm, '| expires:', expiresAt.toISOString());
       return res.status(200).json({ success: true, action: 'activated', email: emailNorm, expires_at: expiresAt.toISOString() });
     }
 
-    // Evento ignorado
-    return res.status(200).json({ message: 'Event ignored', event });
+    // Evento não mapeado — retorna 200 para Hotmart não retentar
+    console.log('Event ignored:', event, '| status:', status, '| email:', emailNorm);
+    return res.status(200).json({ message: 'Event ignored', event, status });
 
   } catch (err) {
     console.error('Handler error:', err);
