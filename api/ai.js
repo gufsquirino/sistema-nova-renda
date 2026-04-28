@@ -1,28 +1,61 @@
-// api/ai.js — proxy seguro para a API da Anthropic
-// Chave nunca exposta no frontend
+// api/ai.js — proxy seguro para Anthropic
+// Protegido: só aceita chamadas com session token válido
+
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY
+);
+
+// Token interno compartilhado entre hub e backend
+// Nunca exposto na URL — vai no header Authorization
+const SESSION_SECRET = process.env.SESSION_SECRET;
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST')   return res.status(405).json({ error: 'Method not allowed' });
 
+  // ── 1. Valida token de sessão ─────────────────────────────────
+  const authHeader = req.headers['authorization'] || '';
+  const token = authHeader.replace('Bearer ', '').trim();
+
+  if (!token) {
+    return res.status(401).json({ error: 'Missing token' });
+  }
+
+  // Verifica token no Supabase — gerado no login, salvo na tabela sessions
+  const { data: session, error: sessErr } = await supabase
+    .from('sessions')
+    .select('email, expires_at')
+    .eq('token', token)
+    .single();
+
+  if (sessErr || !session) {
+    return res.status(401).json({ error: 'Invalid or expired session' });
+  }
+
+  // Verifica se sessão não expirou (24h)
+  if (new Date() > new Date(session.expires_at)) {
+    await supabase.from('sessions').delete().eq('token', token);
+    return res.status(401).json({ error: 'Session expired, login again' });
+  }
+
+  // ── 2. Valida payload ─────────────────────────────────────────
   const { system, messages } = req.body || {};
 
   if (!messages || !Array.isArray(messages) || messages.length === 0) {
-    return res.status(400).json({ error: 'messages array required' });
+    return res.status(400).json({ error: 'messages required' });
   }
-
   if (messages.length > 30) {
-    return res.status(400).json({ error: 'Conversation too long' });
+    return res.status(400).json({ error: 'Too many messages' });
   }
 
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return res.status(500).json({ error: 'API key not configured' });
-  }
-
+  // ── 3. Chama Anthropic ────────────────────────────────────────
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -42,7 +75,7 @@ export default async function handler(req, res) {
     const data = await response.json();
 
     if (!response.ok) {
-      console.error('Anthropic error:', response.status, JSON.stringify(data));
+      console.error('Anthropic error:', response.status, data);
       return res.status(500).json({ error: data?.error?.message || 'Anthropic error' });
     }
 
