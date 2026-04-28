@@ -1,16 +1,10 @@
 // api/ai.js — proxy seguro para a API da Anthropic
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
-);
+// Chave nunca exposta no frontend
 
 export default async function handler(req, res) {
-  // CORS — permite qualquer origem (hub pode estar em qualquer domínio)
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST')   return res.status(405).json({ error: 'Method not allowed' });
@@ -26,7 +20,6 @@ export default async function handler(req, res) {
   }
 
   if (!process.env.ANTHROPIC_API_KEY) {
-    console.error('ANTHROPIC_API_KEY not set');
     return res.status(500).json({ error: 'API key not configured' });
   }
 
@@ -49,7 +42,7 @@ export default async function handler(req, res) {
     const data = await response.json();
 
     if (!response.ok) {
-      console.error('Anthropic error:', response.status, data);
+      console.error('Anthropic error:', response.status, JSON.stringify(data));
       return res.status(500).json({ error: data?.error?.message || 'Anthropic error' });
     }
 
