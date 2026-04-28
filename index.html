@@ -736,7 +736,7 @@ function sendMsg() {
   var msgs = HIST[CUR.id].map(function(m){ return {role:m.role,content:m.raw||m.disp}; });
   fetch(CFG.apiUrl + '/api/ai',{
     method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+(ME&&ME.token?ME.token:'')},
-    body:JSON.stringify({system:CUR.sys,messages:msgs})
+    body:JSON.stringify({agentId:CUR.id,messages:msgs})
   }).then(function(r){ return r.json(); })
   .then(function(data){
     var reply=data.text||'N&#227;o consegui processar. Tente novamente.';
