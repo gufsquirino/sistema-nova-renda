@@ -1,14 +1,19 @@
-// api/auth.js — verifica acesso, expiração e reembolso
+// api/auth.js — login + geração de session token
 import { createClient } from '@supabase/supabase-js';
+import { randomBytes }   from 'crypto';
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
 );
 
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@gmail.com';
-const ADMIN_PASS  = process.env.ADMIN_PASS  || 'geniusdrop2026';
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL   || 'admin@gmail.com';
+const ADMIN_PASS  = process.env.ADMIN_PASS    || 'geniusdrop2026';
 const SUFFIX      = process.env.PASSWORD_SUFFIX || 'geniusdrop2026';
+
+function generateToken() {
+  return randomBytes(32).toString('hex'); // 64 chars, criptograficamente seguro
+}
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -22,76 +27,71 @@ export default async function handler(req, res) {
 
   const emailNorm = email.trim().toLowerCase();
 
-  // 1. Admin — acesso irrestrito
-  if (emailNorm === ADMIN_EMAIL.toLowerCase() && password === ADMIN_PASS) {
-    return res.status(200).json({ ok: true, role: 'admin', email: emailNorm, name: emailNorm.split('@')[0] });
-  }
+  // ── 1. Admin ──────────────────────────────────────────────────
+  const isAdmin = (emailNorm === ADMIN_EMAIL.toLowerCase() && password === ADMIN_PASS);
 
-  // 2. Verifica senha padrão
-  if (password !== emailNorm + SUFFIX) {
+  // ── 2. Senha padrão membro ────────────────────────────────────
+  const isMemberPass = (password === emailNorm + SUFFIX);
+
+  if (!isAdmin && !isMemberPass) {
     return res.status(401).json({ ok: false, error: 'Senha incorreta. Verifique seu e-mail de compra.' });
   }
 
-  // 3. Busca membro no banco
-  const { data, error } = await supabase
-    .from('members')
-    .select('email, active, expires_at, deactivation_reason')
-    .eq('email', emailNorm)
-    .single();
+  // ── 3. Verifica membro no banco ───────────────────────────────
+  if (!isAdmin) {
+    const { data, error } = await supabase
+      .from('members')
+      .select('email, active, expires_at')
+      .eq('email', emailNorm)
+      .single();
 
-  if (error || !data) {
-    return res.status(403).json({
-      ok: false,
-      error: 'Acesso n\u00e3o encontrado. Verifique se a compra foi confirmada ou entre em contato com o suporte.'
-    });
-  }
-
-  // 4. Verifica reembolso / cancelamento
-  if (!data.active) {
-    return res.status(403).json({
-      ok: false,
-      error: 'Seu acesso foi cancelado. Em caso de d\u00favidas, entre em contato com o suporte.'
-    });
-  }
-
-  // 5. Verifica expiração (12 meses)
-  if (data.expires_at) {
-    const now     = new Date();
-    const expires = new Date(data.expires_at);
-    if (now > expires) {
-      // Desativa automaticamente no banco
-      await supabase
-        .from('members')
-        .update({ active: false, deactivation_reason: 'expired' })
-        .eq('email', emailNorm);
-
-      return res.status(403).json({
-        ok: false,
-        error: 'Seu acesso de 12 meses expirou. Renove sua assinatura para continuar.'
-      });
+    if (error || !data) {
+      return res.status(403).json({ ok: false, error: 'Acesso n\u00e3o encontrado. Verifique se a compra foi confirmada ou entre em contato com o suporte.' });
+    }
+    if (!data.active) {
+      return res.status(403).json({ ok: false, error: 'Seu acesso foi cancelado. Entre em contato com o suporte.' });
+    }
+    if (data.expires_at && new Date() > new Date(data.expires_at)) {
+      await supabase.from('members').update({ active: false, deactivation_reason: 'expired' }).eq('email', emailNorm);
+      return res.status(403).json({ ok: false, error: 'Seu acesso de 12 meses expirou. Renove para continuar.' });
     }
 
-    // Avisa quando falta menos de 15 dias
-    const daysLeft = Math.ceil((expires - now) / (1000 * 60 * 60 * 24));
-    const warning  = daysLeft <= 15
+    // Aviso de expiração próxima
+    const daysLeft = data.expires_at
+      ? Math.ceil((new Date(data.expires_at) - new Date()) / 86400000)
+      : null;
+    const warning = daysLeft && daysLeft <= 15
       ? 'Seu acesso expira em ' + daysLeft + ' dia' + (daysLeft > 1 ? 's' : '') + '. Renove para n\u00e3o perder o acesso.'
       : null;
 
+    // Gera session token
+    const token     = generateToken();
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
+
+    await supabase.from('sessions').upsert(
+      { email: emailNorm, token, expires_at: expiresAt.toISOString() },
+      { onConflict: 'email' }
+    );
+
     return res.status(200).json({
-      ok: true,
-      role: 'member',
-      email: emailNorm,
-      name: emailNorm.split('@')[0],
-      expires_at: data.expires_at,
-      warning
+      ok: true, role: 'member',
+      email: emailNorm, name: emailNorm.split('@')[0],
+      token, expires_at: data.expires_at, warning
     });
   }
 
-  // 6. Acesso OK sem data de expiração definida
+  // ── 4. Admin — gera session token também ─────────────────────
+  const token     = generateToken();
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+  await supabase.from('sessions').upsert(
+    { email: emailNorm, token, expires_at: expiresAt.toISOString() },
+    { onConflict: 'email' }
+  );
+
   return res.status(200).json({
-    ok: true,
-    role: 'member',
-    email: emailNorm,
-    name: emailNorm.split('@')[0]
+    ok: true, role: 'admin',
+    email: emailNorm, name: emailNorm.split('@')[0],
+    token
   });
 }
