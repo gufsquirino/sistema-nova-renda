@@ -1,43 +1,40 @@
 // api/auth.js — login + geração de session token
 import { createClient } from '@supabase/supabase-js';
 import { randomBytes }   from 'crypto';
+import { setCors, handlePreflight } from './_cors.js';
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
 );
 
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL   || 'admin@gmail.com';
-const ADMIN_PASS  = process.env.ADMIN_PASS    || 'geniusdrop2026';
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL    || 'admin@gmail.com';
+const ADMIN_PASS  = process.env.ADMIN_PASS     || 'geniusdrop2026';
 const SUFFIX      = process.env.PASSWORD_SUFFIX || 'geniusdrop2026';
 
 function generateToken() {
-  return randomBytes(32).toString('hex'); // 64 chars, criptograficamente seguro
+  return randomBytes(32).toString('hex');
 }
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST')   return res.status(405).json({ error: 'Method not allowed' });
+  setCors(req, res);
+  if (handlePreflight(req, res)) return;
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const { email, password } = req.body || {};
   if (!email || !password) return res.status(400).json({ ok: false, error: 'Preencha e-mail e senha.' });
 
   const emailNorm = email.trim().toLowerCase();
 
-  // ── 1. Admin ──────────────────────────────────────────────────
+  // ── Admin ──────────────────────────────────────────────────────
   const isAdmin = (emailNorm === ADMIN_EMAIL.toLowerCase() && password === ADMIN_PASS);
-
-  // ── 2. Senha padrão membro ────────────────────────────────────
   const isMemberPass = (password === emailNorm + SUFFIX);
 
   if (!isAdmin && !isMemberPass) {
     return res.status(401).json({ ok: false, error: 'Senha incorreta. Verifique seu e-mail de compra.' });
   }
 
-  // ── 3. Verifica membro no banco ───────────────────────────────
+  // ── Verifica membro no banco ───────────────────────────────────
   if (!isAdmin) {
     const { data, error } = await supabase
       .from('members')
@@ -56,7 +53,6 @@ export default async function handler(req, res) {
       return res.status(403).json({ ok: false, error: 'Seu acesso de 12 meses expirou. Renove para continuar.' });
     }
 
-    // Aviso de expiração próxima
     const daysLeft = data.expires_at
       ? Math.ceil((new Date(data.expires_at) - new Date()) / 86400000)
       : null;
@@ -64,9 +60,8 @@ export default async function handler(req, res) {
       ? 'Seu acesso expira em ' + daysLeft + ' dia' + (daysLeft > 1 ? 's' : '') + '. Renove para n\u00e3o perder o acesso.'
       : null;
 
-    // Gera session token
     const token     = generateToken();
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
     await supabase.from('sessions').upsert(
       { email: emailNorm, token, expires_at: expiresAt.toISOString() },
@@ -80,7 +75,7 @@ export default async function handler(req, res) {
     });
   }
 
-  // ── 4. Admin — gera session token também ─────────────────────
+  // ── Admin token ────────────────────────────────────────────────
   const token     = generateToken();
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
