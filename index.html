@@ -545,9 +545,20 @@ function doLogin() {
   .then(function(data){
     btn.textContent = 'ACESSAR O HUB ?'; btn.disabled = false;
     if (data.ok) {
-      ME = { email: data.email, name: data.name, role: data.role };
+      ME = { email: data.email, name: data.name, role: data.role, expires_at: data.expires_at };
       try { localStorage.setItem('snr_s', JSON.stringify(ME)); } catch(e) {}
       bootApp();
+      // Show expiry warning if less than 15 days left
+      if (data.warning) {
+        setTimeout(function() {
+          var w = document.createElement('div');
+          w.style.cssText = 'position:fixed;top:16px;right:16px;z-index:9999;background:#F59E0B;color:#000;padding:12px 18px;border-radius:10px;font-family:var(--fh);font-size:13px;font-weight:600;max-width:300px;box-shadow:0 8px 24px rgba(0,0,0,.3);cursor:pointer;';
+          w.textContent = '?? ' + data.warning;
+          w.onclick = function(){ document.body.removeChild(w); };
+          document.body.appendChild(w);
+          setTimeout(function(){ if(document.body.contains(w)) document.body.removeChild(w); }, 8000);
+        }, 1000);
+      }
     } else {
       err.textContent = data.error || 'Acesso negado.';
       err.style.display = 'block';
