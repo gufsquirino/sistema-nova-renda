@@ -688,6 +688,30 @@ function renderChatBody() {
   body.innerHTML = h;
   body.scrollTop = body.scrollHeight;
 }
+function mdToHtml(t) {
+  // Escape HTML first
+  t = t.split('&').join('&amp;');
+  t = t.split('<').join('&lt;');
+  t = t.split('>').join('&gt;');
+  // Bold **text**
+  t = t.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  // Italic *text*
+  t = t.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+  // Headers ## and ###
+  t = t.replace(/^### (.+)$/gm, '<strong style="font-size:13px;display:block;margin-top:10px;color:var(--text)">$1</strong>');
+  t = t.replace(/^## (.+)$/gm,  '<strong style="font-size:14px;display:block;margin-top:12px;color:var(--text)">$1</strong>');
+  t = t.replace(/^# (.+)$/gm,   '<strong style="font-size:15px;display:block;margin-top:14px;color:var(--text)">$1</strong>');
+  // List items - or *
+  t = t.replace(/^[-\*] (.+)$/gm, '<span style="display:block;padding-left:12px;margin:2px 0">&#8226; $1</span>');
+  // Numbered list
+  t = t.replace(/^\d+\. (.+)$/gm, '<span style="display:block;padding-left:12px;margin:2px 0">$1</span>');
+  // Line breaks
+  t = t.replace(/\n/g, '<br>');
+  // Clean double breaks
+  t = t.replace(/(<br>){3,}/g, '<br><br>');
+  return t;
+}
+
 function escH(t){
   t = t.split('&').join('&amp;');
   t = t.split('<').join('&lt;');
@@ -719,7 +743,7 @@ function sendMsg() {
   }).then(function(data){
     var reply=data.text||'N&#227;o consegui processar. Tente novamente.';
     var tm=document.getElementById('typing-msg'); if(tm) tm.parentNode.removeChild(tm);
-    HIST[CUR.id].push({role:'assistant',disp:escH(reply),raw:reply});
+    HIST[CUR.id].push({role:'assistant',disp:mdToHtml(reply),raw:reply});
     renderChatBody();
   }).catch(function(err){
     console.error('AI fetch error:', err);
