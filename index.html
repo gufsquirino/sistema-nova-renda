@@ -737,10 +737,8 @@ function sendMsg() {
   fetch(CFG.apiUrl + '/api/ai',{
     method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+(ME&&ME.token?ME.token:'')},
     body:JSON.stringify({system:CUR.sys,messages:msgs})
-  }).then(function(r){
-    if(!r.ok){ return r.json().then(function(e){ throw new Error(e.error||'HTTP '+r.status); }); }
-    return r.json();
-  }).then(function(data){
+  }).then(function(r){ return r.json(); })
+  .then(function(data){
     var reply=data.text||'N&#227;o consegui processar. Tente novamente.';
     var tm=document.getElementById('typing-msg'); if(tm) tm.parentNode.removeChild(tm);
     HIST[CUR.id].push({role:'assistant',disp:mdToHtml(reply),raw:reply});
