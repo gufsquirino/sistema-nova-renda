@@ -519,7 +519,7 @@ body{font-family:var(--fb);background:var(--bg);color:var(--text);min-height:100
 
 <script>
 // ?? CONFIG ??
-var CFG = { welcomeVideoId: 'COLE_ID_YOUTUBE_AQUI' };
+var CFG = { welcomeVideoId: 'COLE_ID_YOUTUBE_AQUI', apiUrl: 'https://sistema-nova-renda.vercel.app' };
 
 // ?? CREDENTIALS ??
 var SUFFIX = String.fromCharCode(103,101,110,105,117,115,100,114,111,112,50,48,50,54);
@@ -532,13 +532,32 @@ function doLogin() {
   var email = document.getElementById('l-email').value.trim().toLowerCase();
   var pass  = document.getElementById('l-pass').value.trim();
   var err   = document.getElementById('lg-err');
+  var btn   = document.getElementById('lg-btn');
   if (!email || !pass) { err.textContent = 'Preencha e-mail e senha.'; err.style.display = 'block'; return; }
-  var ok = (email === _AE && pass === _AP) || (pass === email + SUFFIX);
-  if (!ok) { err.style.display = 'block'; return; }
+  btn.textContent = 'VERIFICANDO...'; btn.disabled = true;
   err.style.display = 'none';
-  ME = { email: email, name: email.split('@')[0] };
-  try { localStorage.setItem('snr_s', JSON.stringify(ME)); } catch(e) {}
-  bootApp();
+  fetch(CFG.apiUrl + '/api/auth', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: email, password: pass })
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(data){
+    btn.textContent = 'ACESSAR O HUB ?'; btn.disabled = false;
+    if (data.ok) {
+      ME = { email: data.email, name: data.name, role: data.role };
+      try { localStorage.setItem('snr_s', JSON.stringify(ME)); } catch(e) {}
+      bootApp();
+    } else {
+      err.textContent = data.error || 'Acesso negado.';
+      err.style.display = 'block';
+    }
+  })
+  .catch(function(){
+    btn.textContent = 'ACESSAR O HUB ?'; btn.disabled = false;
+    err.textContent = 'Erro de conex?o. Tente novamente.';
+    err.style.display = 'block';
+  });
 }
 function doLogout() {
   ME = null;
