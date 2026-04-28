@@ -1107,25 +1107,25 @@ body {
 
     <nav class="sidebar-nav">
       <div class="nav-label">Principal</div>
-      <div class="nav-item active" onclick="nav(\'home\')">
+      <div class="nav-item active" data-page="home">
         <span class="nav-icon">&#11035;</span> Home
       </div>
-      <div class="nav-item" onclick="nav(\'trilha\')">
+      <div class="nav-item" data-page="trilha">
         <span class="nav-icon">&#128506;</span> Trilha de Consumo
       </div>
 
       <div class="nav-label">Ferramentas</div>
-      <div class="nav-item" onclick="nav(\'agentes\')">
+      <div class="nav-item" data-page="agentes">
         <span class="nav-icon">&#11041;</span> Agentes de IA
         <span class="nav-badge blue">7</span>
       </div>
 
       <div class="nav-label">Comunidade</div>
-      <div class="nav-item" onclick="nav(\'comunidade\')">
+      <div class="nav-item" data-page="comunidade">
         <span class="nav-icon">&#9672;</span> Comunidade
         <span class="nav-badge">24</span>
       </div>
-      <div class="nav-item" onclick="nav(\'suporte\')">
+      <div class="nav-item" data-page="suporte">
         <span class="nav-icon">&#9678;</span> Suporte
       </div>
     </nav>
@@ -1168,15 +1168,15 @@ body {
           <p class="hero-tagline">Tudo que voce precisa para montar, operar e escalar sua loja -- guias, agentes de IA e comunidade em um so lugar.</p>
 
           <div class="hero-actions">
-            <button class="btn-primary" onclick="nav('trilha')">
+            <button class="btn-primary" data-page="trilha">
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7h10M8 3l4 4-4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
               INICIAR TRILHA
             </button>
-            <button class="btn-ghost" onclick="nav('agentes')">
+            <button class="btn-ghost" data-page="agentes">
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.5" stroke="currentColor" stroke-width="1.5"/><circle cx="7" cy="7" r="2" fill="currentColor"/></svg>
               AGENTES DE IA
             </button>
-            <button class="btn-ghost" onclick="nav('comunidade')">
+            <button class="btn-ghost" data-page="comunidade">
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 10.5C2 8.567 3.567 7 5.5 7h3C10.433 7 12 8.567 12 10.5V11H2v-.5z" stroke="currentColor" stroke-width="1.4"/><circle cx="7" cy="3.5" r="2" stroke="currentColor" stroke-width="1.4"/></svg>
               COMUNIDADE
             </button>
@@ -1502,12 +1502,16 @@ function renderAgentsList() {
   for (var i = 0; i < AGENTS.length; i++) {
     var a = AGENTS[i];
     var active = a.id === CURRENT_AGENT.id ? ' active' : '';
-    html += '<div class="agent-btn' + active + '" onclick="pickAgent(\'' + a.id + '\')">';
+    html += '<div class="agent-btn' + active + '" data-agent="' + a.id + '">';
     html += '<div class="agent-btn-icon" style="background:' + a.color + '">' + a.icon + '<\/div>';
     html += '<div class="agent-btn-info"><p>' + a.label + '<\/p><span>' + a.short + '<\/span><\/div>';
     html += '<\/div>';
   }
   document.getElementById('agents-list').innerHTML = html;
+  document.getElementById('agents-list').addEventListener('click', function(e) {
+    var btn = e.target.closest('[data-agent]');
+    if (btn) pickAgent(btn.getAttribute('data-agent'));
+  });
 }
 
 function pickAgent(id) {
@@ -1653,6 +1657,12 @@ function handleImg(e) {
   };
   reader.readAsDataURL(f);
 }
+document.addEventListener('click', function(e) {
+  if (e.target.id === 'attach-btn') {
+    document.getElementById('file-in').click();
+  }
+});
+
 function rmImg() {
   ATTACHED_IMG = null;
   document.getElementById('img-row').style.display = 'none';
@@ -1718,6 +1728,15 @@ function bootApp() {
   document.getElementById('uemail').textContent= ME.email;
   renderAll();
 }
+
+// Global data-page click handler (handles sidebar + hero buttons)
+document.addEventListener('click', function(e) {
+  var el = e.target.closest('[data-page]');
+  if (el) {
+    e.preventDefault();
+    nav(el.getAttribute('data-page'));
+  }
+});
 
 // Auto-session restore
 try {
