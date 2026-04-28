@@ -734,21 +734,33 @@ function sendMsg() {
   td.innerHTML='<div class="cmsg-av">IA</div><div class="cmsg-bub"><div class="typing-row"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div></div>';
   body.appendChild(td); body.scrollTop=body.scrollHeight;
   var msgs = HIST[CUR.id].map(function(m){ return {role:m.role,content:m.raw||m.disp}; });
-  fetch(CFG.apiUrl + '/api/ai',{
-    method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+(ME&&ME.token?ME.token:'')},
-    body:JSON.stringify({agentId:CUR.id,messages:msgs})
-  }).then(function(r){ return r.json(); })
-  .then(function(data){
-    var reply=data.text||'N&#227;o consegui processar. Tente novamente.';
-    var tm=document.getElementById('typing-msg'); if(tm) tm.parentNode.removeChild(tm);
-    HIST[CUR.id].push({role:'assistant',disp:mdToHtml(reply),raw:reply});
-    renderChatBody();
-  }).catch(function(err){
-    console.error('AI fetch error:', err);
-    var tm=document.getElementById('typing-msg'); if(tm) tm.parentNode.removeChild(tm);
-    HIST[CUR.id].push({role:'assistant',disp:'Erro de conex&#227;o: '+err.message,raw:''});
-    renderChatBody();
-  });
+  function doAiFetch(attempt) {
+    fetch(CFG.apiUrl + '/api/ai',{
+      method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+(ME&&ME.token?ME.token:'')},
+      body:JSON.stringify({agentId:CUR.id,messages:msgs})
+    }).then(function(r){ return r.json(); })
+    .then(function(data){
+      if(data.error){
+        var tm2=document.getElementById('typing-msg'); if(tm2) tm2.parentNode.removeChild(tm2);
+        HIST[CUR.id].push({role:'assistant',disp:'<span style="color:#F59E0B">&#9888; '+escH(data.error)+'</span>',raw:''});
+        renderChatBody(); return;
+      }
+      var reply=data.text||'N&#227;o consegui processar. Tente novamente.';
+      var tm=document.getElementById('typing-msg'); if(tm) tm.parentNode.removeChild(tm);
+      HIST[CUR.id].push({role:'assistant',disp:mdToHtml(reply),raw:reply});
+      renderChatBody();
+    }).catch(function(err){
+      if(attempt < 2) {
+        setTimeout(function(){ doAiFetch(attempt+1); }, 1500);
+        return;
+      }
+      console.error('AI fetch error:', err);
+      var tm=document.getElementById('typing-msg'); if(tm) tm.parentNode.removeChild(tm);
+      HIST[CUR.id].push({role:'assistant',disp:'Erro de conex&#227;o. Tente novamente.',raw:''});
+      renderChatBody();
+    });
+  }
+  doAiFetch(1);
 }
 
 // ?? COMMUNITY ??
