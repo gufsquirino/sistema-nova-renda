@@ -710,11 +710,11 @@ function sendMsg() {
   td.innerHTML='<div class="cmsg-av">IA</div><div class="cmsg-bub"><div class="typing-row"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div></div>';
   body.appendChild(td); body.scrollTop=body.scrollHeight;
   var msgs = HIST[CUR.id].map(function(m){ return {role:m.role,content:m.raw||m.disp}; });
-  fetch('https://api.anthropic.com/v1/messages',{
+  fetch(CFG.apiUrl + '/api/ai',{
     method:'POST', headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,system:CUR.sys,messages:msgs})
+    body:JSON.stringify({system:CUR.sys,messages:msgs})
   }).then(function(r){return r.json();}).then(function(data){
-    var reply=(data.content&&data.content[0])?data.content[0].text:'N&#227;o consegui processar. Tente novamente.';
+    var reply=data.text||'N&#227;o consegui processar. Tente novamente.';
     var tm=document.getElementById('typing-msg'); if(tm) tm.parentNode.removeChild(tm);
     HIST[CUR.id].push({role:'assistant',disp:escH(reply),raw:reply});
     renderChatBody();
