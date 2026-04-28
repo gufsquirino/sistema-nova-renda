@@ -545,7 +545,7 @@ function doLogin() {
   .then(function(data){
     btn.textContent = 'ACESSAR O HUB ?'; btn.disabled = false;
     if (data.ok) {
-      ME = { email: data.email, name: data.name, role: data.role, expires_at: data.expires_at };
+      ME = { email: data.email, name: data.name, role: data.role, expires_at: data.expires_at, token: data.token };
       try { localStorage.setItem('snr_s', JSON.stringify(ME)); } catch(e) {}
       bootApp();
       // Show expiry warning if less than 15 days left
@@ -735,7 +735,7 @@ function sendMsg() {
   body.appendChild(td); body.scrollTop=body.scrollHeight;
   var msgs = HIST[CUR.id].map(function(m){ return {role:m.role,content:m.raw||m.disp}; });
   fetch(CFG.apiUrl + '/api/ai',{
-    method:'POST', headers:{'Content-Type':'application/json'},
+    method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+(ME&&ME.token?ME.token:'')},
     body:JSON.stringify({system:CUR.sys,messages:msgs})
   }).then(function(r){
     if(!r.ok){ return r.json().then(function(e){ throw new Error(e.error||'HTTP '+r.status); }); }
