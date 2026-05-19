@@ -271,9 +271,14 @@ body{font-family:var(--fb);background:var(--bg);color:var(--text);min-height:100
   .main{margin-left:0;padding:64px 16px 40px}
   .ham{display:flex}
   .mob-ov.visible{display:block}
-  .ag-shell{grid-template-columns:1fr;height:auto}
-  .ag-list{flex-direction:row;overflow-x:auto;overflow-y:hidden;max-height:70px;padding:6px}
-  .ag-lbl{display:none}
+  .ag-shell{grid-template-columns:1fr;height:auto;gap:12px}
+  .ag-list{flex-direction:column;overflow-x:hidden;overflow-y:visible;max-height:none;padding:8px;display:grid;grid-template-columns:repeat(2,1fr)}
+  .ag-lbl{display:block;grid-column:1/-1}
+  .ag-btn{padding:10px 10px}
+  .ag-name{font-size:11px}
+  .ag-short{font-size:10px}
+  .ag-icon{width:28px;height:28px;font-size:13px}
+  .chat-panel{min-height:420px}
   .comm-shell{grid-template-columns:1fr;height:auto}
   .comm-side{display:none}
   .sup-grid{grid-template-columns:1fr}
@@ -742,6 +747,13 @@ function sendMsg() {
     .then(function(data){
       if(data.error){
         var tm2=document.getElementById('typing-msg'); if(tm2) tm2.parentNode.removeChild(tm2);
+        // Session expired ? force re-login
+        if(data.error.indexOf('session') !== -1 || data.error.indexOf('token') !== -1 || data.error.indexOf('Token') !== -1) {
+          HIST[CUR.id].push({role:'assistant',disp:'<span style="color:#F59E0B">&#9888; Sess&#227;o expirada. Fazendo logout autom&#225;tico...</span>',raw:''});
+          renderChatBody();
+          setTimeout(function(){ doLogout(); }, 1500);
+          return;
+        }
         HIST[CUR.id].push({role:'assistant',disp:'<span style="color:#F59E0B">&#9888; '+escH(data.error)+'</span>',raw:''});
         renderChatBody(); return;
       }
